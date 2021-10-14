@@ -78,7 +78,7 @@ module.exports = function () {
                 if (err) throw err;
 
                 var svg = data.svg;
-                var delay = 10;
+                var delay = 50;
                 console.log("data.scale", data.scale);
                 var scale = typeof(data.scale) == "number" ? data.scale : 1;
                 
@@ -112,8 +112,10 @@ module.exports = function () {
  + '        window.setTimeout(function () {\n'
  + '            window.requestAnimationFrame(function () {\n'
  + '                window.requestAnimationFrame(function () {\n'
- + '                    ipcRenderer.send("render-rendered", {objectsWithLinking: window.objectsWithLinking});\n'
- + '                    console.log("Rendered signaled");\n'
+ + '                    window.setTimeout(function () {\n'
+     + '                    ipcRenderer.send("render-rendered", {objectsWithLinking: window.objectsWithLinking});\n'
+     + '                    console.log("Rendered signaled");\n'
+     + '                }, 10);\n'
  + '                });\n'
  + '            });\n'
  + '        }, ' + delay + ');\n'
@@ -141,7 +143,7 @@ module.exports = function () {
                         event.sender.send(data.id, {url: "", objectsWithLinking: renderedData.objectsWithLinking});
                         __callback();
                     } else {
-                        rendererWindow.capturePage(function (nativeImage) {
+                        rendererWindow.capturePage().then(function (nativeImage) {
                             var dataURL = nativeImage.toDataURL();
 
                             cleanupCallback();

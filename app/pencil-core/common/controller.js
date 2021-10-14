@@ -1158,12 +1158,13 @@ Controller.prototype.rasterizeCurrentPage = function (targetPage) {
         filters: [
             { name: "PNG Image (*.png)", extensions: ["png"] }
         ]
-    }, function (filePath) {
-        if (!filePath) return;
+    }).then(function (res) {
+        if (!res || !res.filePath) return;
+        var filePath = res.filePath;
         this.applicationPane.rasterizer.rasterizePageToFile(page, filePath, function (p, error) {
             if (!error) {
                 NotificationPopup.show("Page exprted as '" + path.basename(filePath) + "'.", "View", function () {
-                    shell.openItem(filePath);
+                    shell.openPath(filePath);
                 });
             }
         }, undefined, false, options);
@@ -1204,7 +1205,8 @@ Controller.prototype.copyPageBitmap = function (targetPage) {
         var filePath = tmp.tmpNameSync();
         thiz.applicationPane.rasterizer.rasterizePageToFile(page, filePath, function (p, error) {
             if (!error) {
-                clipboard.writeImage(filePath);
+                var image = nativeImage.createFromPath(filePath);
+                var result = clipboard.writeImage(image);
                 fs.unlinkSync(filePath);
                 NotificationPopup.show("Page bitmap copied into clipboard.");
             }
@@ -1232,7 +1234,8 @@ Controller.prototype.rasterizeSelection = function (options) {
         
         this.applicationPane.rasterizer.rasterizeSelectionToFile(target, filePath, function (p, error) {
             if (!error) {
-                clipboard.writeImage(filePath);
+                var image = nativeImage.createFromPath(filePath);
+                clipboard.writeImage(image);
                 fs.unlinkSync(filePath);
                 NotificationPopup.show("Page bitmap copied into clipboard.");
             }
@@ -1244,12 +1247,13 @@ Controller.prototype.rasterizeSelection = function (options) {
             filters: [
                 { name: "PNG Image (*.png)", extensions: ["png"] }
             ]
-        }, function (filePath) {
-            if (!filePath) return;
+        }).then(function (res) {
+            if (!res || !res.filePath) return;
+            var filePath = res.filePath;
             this.applicationPane.rasterizer.rasterizeSelectionToFile(target, filePath, function (p, error) {
                 if (!error) {
                     NotificationPopup.show("Selection exprted as '" + path.basename(filePath) + "'.", "View", function () {
-                        shell.openItem(filePath);
+                        shell.openPath(filePath);
                     });
                 }
             }, undefined, options);
@@ -1684,14 +1688,14 @@ Controller.prototype.exportAsLayout = function () {
         title: "Export Layout",
         defaultPath: defaultPath,
         filters: [{name: 'XHTML Layout', extensions: ["xhtml"]}]
-    }, function (filePath) {
-        if (filePath) {
-            outputPath = filePath;
-            outputImage = path.join(path.dirname(outputPath), IMAGE_FILE);
-            Pencil.rasterizer.rasterizePageToFile(thiz.activePage, outputImage, function (p, error) {
-                done();
-            });
-        }
+    }).then(function (res) {
+        if (!res || !res.filePath) return;
+        var filePath = res.filePath;
+        outputPath = filePath;
+        outputImage = path.join(path.dirname(outputPath), IMAGE_FILE);
+        Pencil.rasterizer.rasterizePageToFile(thiz.activePage, outputImage, function (p, error) {
+            done();
+        });
     });
 };
 
@@ -1713,6 +1717,42 @@ Controller.prototype.logShapeReparationRequest = function (shapeNode) {
 };
 
 Config.CAPTURE_INSERT_BITMAP_AS_DEFID = Config.define("capture.insert_bitmap_shape_id", "Evolus.Common:Bitmap");
+
+Controller.prototype.handleNewDocumentFromImage = function (filePath) {
+    ImageData.fromExternalToImageData(filePath, function (imageData) {
+        if (!imageData) return;
+        
+        var ratio = window.devicePixelRatio || 1;
+        var dim = new Dimension(Math.round(imageData.w / ratio), Math.round(imageData.h / ratio));
+        
+        var options = {
+            name: path.basename(filePath),
+            width: dim.w,
+            height: dim.h,
+            backgroundPageId: null,
+            backgroundColor: Color.fromString("#FFFFFFFF"),
+            note: "",
+            parentPageId: null,
+            activateAfterCreate: true
+        };
+        
+        this.newPage(options);
+        
+        var page = this.activePage;
+
+        var def = CollectionManager.shapeDefinition.locateDefinition(Config.get(Config.CAPTURE_INSERT_BITMAP_AS_DEFID));
+        if (!def) return;
+
+        page.canvas.insertShape(def, null);
+        if (!page.canvas.currentController) return;
+
+        var controller = page.canvas.currentController;
+
+        page.canvas.currentController.setProperty("imageData", imageData);
+        page.canvas.currentController.setProperty("box", dim);
+        page.canvas.invalidateEditors();
+    }.bind(this));
+};
 
 Controller.prototype.handleGlobalScreencapture = function (mode) {
     var newDocumentCreated = false;
